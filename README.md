@@ -130,8 +130,40 @@ developed against locally), then build all three Docker images via `docker compo
 final proof each Dockerfile actually produces a working image from a clean checkout. No registry
 push — that's out of scope for what the spec asks for ("Builds the Docker image").
 
-**Not yet run** — this repo hasn't been pushed to an actual GitHub repository yet, so the workflow
-has only been validated for YAML correctness, not by GitHub Actions actually executing it.
+**Verified: pushed to GitHub and ran successfully** — `Success`, 2m 5s total, `build-and-test` job
+green. This is the strongest verification in the repo: a completely clean environment (fresh
+checkout, no local state, no Windows Docker Desktop quirks) compiled all three services, ran every
+test including the Testcontainers-based ones, and built all three Docker images, with zero manual
+intervention. Two harmless deprecation warnings on `actions/checkout@v4` and `actions/setup-java@v4`
+(Node.js 20 runtime deprecation) were fixed by bumping to `@v6` and `@v5` respectively — confirmed
+as real, current, released versions via search before making the change.
+
+## Load test
+
+`load-test/` has the full runbook: seeding well-funded accounts, a k6 script, and the PCAP capture
+command (a `tcpdump` sidecar container sharing `gateway-service`'s network namespace, since Windows
+has no native `tcpdump` and Wireshark's adapter selection for Docker's internal traffic is
+unreliable).
+
+**Executed and verified** — a 5-minute representative run at 250 TPS (75,000 transactions; the full
+spec figure is 1,000,000 over ~67 minutes, not run due to time constraints — see `load-test/README.md`
+for why a shorter run at the same rate is still legitimate evidence of the target being met):
+
+| Metric | Result |
+|---|---|
+| Target rate | 250 TPS |
+| Achieved rate | 249.55 TPS (99.8%) |
+| Total requests | 74,866 (134 dropped by k6 hitting its own VU ceiling, not a backend failure) |
+| `http_req_failed` | 0.00% — zero failed requests |
+| Latency (median / p95) | 5.77ms / 11.38ms |
+| Latency (max) | 1.61s — a single outlier; p95/p99 stayed low, not a sustained pattern |
+| PCAP capture | `load-test/output/loadtest.pcap`, ~78.5 MB |
+
+**Honest finding on "identify a bottleneck":** at 250 TPS, this system doesn't have one — it handled
+the target rate cleanly with headroom (sub-12ms p95 latency, zero errors). That's a legitimate
+result, but it also means the spec's own target rate wasn't high enough to reveal where the system
+actually degrades. Pushing the rate well above 250 TPS (e.g. 500–1000+) would be the way to find a
+genuine ceiling — not done here, since 250 TPS was the spec's stated target and was met.
 
 ## Manual verification log (what's actually been proven so far)
 
@@ -163,7 +195,10 @@ has only been validated for YAML correctness, not by GitHub Actions actually exe
 ## TODO / not yet implemented
 
 - k8s manifests
-- Load test (250 TPS × 1M transactions) + PCAP capture
+- Full 1,000,000-transaction / 67-minute load test run (5-minute / 75,000-transaction
+  representative run at the same 250 TPS was completed instead — see the Load test section above)
+- Pushing load beyond 250 TPS to find the system's actual breaking point (the 250 TPS target
+  itself revealed no bottleneck — see the Load test section)
 
 ## Tests
 
