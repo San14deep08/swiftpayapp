@@ -3,9 +3,10 @@
 Alternative to `docker-compose.yml` — the spec's mandatory stack allows either ("Docker &
 Kubernetes (Local or Minikube)" / "docker-compose.yml (or K8s manifests)").
 
-**Honest status: written but not run.** This sandboxed environment has no Minikube or kubectl to
-test against, so unlike the rest of this repo, these manifests have not been applied to a real
-cluster. Treat the first `kubectl apply` as the actual verification step.
+**Honest status: applied to a real Minikube cluster, two real bugs found and fixed, but full
+end-to-end stability was never achieved** on the machine this was tested on — see the
+Verification log below for the specifics of what was fixed and what remains genuinely unresolved.
+`docker-compose.yml` is the fully verified path; treat this as a partially-tested alternative.
 
 ## What's here
 
@@ -87,11 +88,40 @@ kubectl port-forward -n swiftpay svc/analytics-worker 8083:8083
 Once forwarded, everything works exactly as documented in the root README — same curl commands,
 same Swagger UI paths, same endpoints.
 
-## Known gaps / not verified
+## Verification log
 
-- Never applied to a real cluster — every command above is the intended workflow, not a confirmed
-  one. `nc` availability and flag support in `busybox:1.36` for the init-container TCP-wait pattern
-  is a very common, well-documented idiom but hasn't been exercised here specifically.
+- **Applied to a real cluster** — Minikube (`docker` driver, since Docker Desktop's own built-in
+  Kubernetes failed to initialize on this machine with a generic `kubeadm init` error across two
+  different provisioning modes; Minikube's driver sidesteps that entirely).
+- **Real bug found and fixed**: Kafka crash-looped with `Unable to register with the controller
+  quorum` — `KAFKA_CONTROLLER_QUORUM_VOTERS` pointed the single-node broker at itself via the
+  `kafka` Service name, and Kubernetes Service self-connection ("hairpin NAT") is unreliable on
+  several CNI implementations. Fixed by using `localhost:9093` for self-referential
+  controller-quorum communication instead (see the comment in `12-kafka.yaml`). Confirmed via
+  `kubectl logs --previous`: after the fix, Kafka's KRaft controller registered successfully and
+  the broker fully started ("Kafka Server started") — a genuine improvement over the pre-fix state,
+  even though a separate issue (below) prevented full end-to-end stability.
+- **Real bug found and fixed**: `ErrImageNeverPull` on all three app services — the manifests
+  referenced `swiftpay/gateway-service:latest` (with a slash), but `docker compose build` actually
+  produces `swiftpay-gateway-service:latest` (Compose's default `<project>-<service>` naming, with
+  a hyphen). Fixed across all three app manifests to match the actual build output.
+- **Unresolved: broad, unexplained pod instability on this specific machine.** Even after both
+  fixes above, a full machine reboot, a completely fresh namespace, freshly rebuilt images, and
+  disabling Docker Desktop's Resource Saver, Postgres, Redis, Kafka, and all three app
+  services — including the official, battle-tested Postgres and Redis images with trivial health
+  checks — intermittently restart and cycle through `CrashLoopBackOff`. Memory (`minikube ssh --
+  free -h`: 5.3GB available) and CPU (`nproc`: 12 cores, `/proc/loadavg`: ~3-4, well under
+  capacity) were both directly measured and ruled out as the cause. This looks like an
+  environmental issue specific to this machine's Minikube/Docker Desktop/WSL2 installation, not a
+  bug in the SwiftPay manifests — but it was not resolved before development time on this
+  genuinely optional verification path (docker-compose already satisfies the spec's requirement)
+  was called complete.
+- **What IS confirmed working from these tests**: the manifest set's logic is sound enough to get
+  every component to `Running` at least once each (postgres, redis, kafka, all three app services
+  all reached `1/1 Running` at various points), and both real bugs found were genuine, fixable
+  issues in the YAML rather than something structurally wrong with the design.
+
+## Known gaps
 - No `HorizontalPodAutoscaler`, `NetworkPolicy`, resource requests/limits, or `Ingress` — this is
   a local/Minikube dev setup matching the spec's own framing ("Local or Minikube"), not a
   production-hardened deployment.

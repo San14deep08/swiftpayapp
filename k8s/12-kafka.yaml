@@ -2,6 +2,15 @@
 # setup than the compose file needed: in-cluster DNS means every client
 # (app pods and this broker itself) reaches it the same way, so there's no
 # need for docker-compose's separate internal/external listener split.
+#
+# IMPORTANT: KAFKA_CONTROLLER_QUORUM_VOTERS uses "localhost", not the
+# "kafka" Service name, even though this broker IS also the controller.
+# Routing self-connection through a Kubernetes Service ("hairpin NAT") is
+# unreliable on several CNI implementations — this caused a real crash loop
+# during testing (BrokerLifecycleManager "Unable to register with the
+# controller quorum" after ~60s of failed connection attempts to the
+# Service's ClusterIP). docker-compose.yml doesn't have this problem
+# because Docker's bridge network handles self-connection differently.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,7 +46,7 @@ spec:
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@kafka:9093"
+              value: "1@localhost:9093"
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
               value: "PLAINTEXT"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
@@ -51,15 +60,25 @@ spec:
             - name: CLUSTER_ID
               value: "swiftpay-local-kraft-cluster"
           readinessProbe:
+            # timeoutSeconds is explicit and generous (default is 1s) because
+            # this exec command spins up its own small JVM to connect and
+            # query the broker — that alone can take several seconds, and
+            # Kubernetes' 1s default falsely reported this as unhealthy,
+            # eventually killing a Kafka instance that had actually started
+            # fine (confirmed via `kubectl logs --previous`: clean startup,
+            # then an external SIGTERM ~55s later, not a Kafka-side crash).
             exec:
               command: ["/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
             initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 10
           livenessProbe:
             exec:
               command: ["/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
-            initialDelaySeconds: 30
+            initialDelaySeconds: 45
             periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
 ---
 apiVersion: v1
 kind: Service

@@ -22,7 +22,9 @@ spec:
           command: ["sh", "-c", "until nc -z -w2 kafka 9092; do echo waiting for kafka; sleep 2; done"]
       containers:
         - name: analytics-worker
-          image: swiftpay/analytics-worker:latest
+          # See 20-gateway-service.yaml's comment — matches docker-compose's
+          # actual build naming, not a guess.
+          image: swiftpay-analytics-worker:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 8083

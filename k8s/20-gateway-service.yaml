@@ -29,7 +29,11 @@ spec:
           command: ["sh", "-c", "until nc -z -w2 kafka 9092; do echo waiting for kafka; sleep 2; done"]
       containers:
         - name: gateway-service
-          image: swiftpay/gateway-service:latest
+          # Matches docker-compose's default build naming (<project>-<service>),
+          # confirmed against the actual `docker compose build` output — NOT
+          # a made-up convention. A real ErrImageNeverPull was hit here during
+          # testing from a mismatched guess (swiftpay/gateway-service).
+          image: swiftpay-gateway-service:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 8081

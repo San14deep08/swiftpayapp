@@ -102,9 +102,13 @@ once implemented). Health: `/actuator/health` on each service.
 
 ### Alternative: Kubernetes / Minikube
 
-The spec allows either `docker-compose.yml` (above) or K8s manifests — both are provided.
-See `k8s/README.md` for the full Minikube setup, build workflow, and apply order. **Written but not
-run against a real cluster** — same honest-verification pattern as everything else in this repo.
+The spec allows either `docker-compose.yml` (above, fully verified) or K8s manifests. The
+Kubernetes path was tested on a real Minikube cluster — two real bugs were found and fixed (a
+Kafka self-connection issue and an image-naming mismatch), but full end-to-end pod stability was
+never achieved due to unexplained, unresolved instability on the specific machine this was tested
+on (memory and CPU were both directly measured and ruled out as the cause). See `k8s/README.md`
+for the complete, honest verification log — this is a partially-tested alternative, not a fully
+confirmed one like `docker-compose.yml`.
 
 ## Verification status — read before trusting anything above
 
