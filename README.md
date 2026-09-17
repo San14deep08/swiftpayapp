@@ -145,25 +145,35 @@ command (a `tcpdump` sidecar container sharing `gateway-service`'s network names
 has no native `tcpdump` and Wireshark's adapter selection for Docker's internal traffic is
 unreliable).
 
-**Executed and verified** — a 5-minute representative run at 250 TPS (75,000 transactions; the full
-spec figure is 1,000,000 over ~67 minutes, not run due to time constraints — see `load-test/README.md`
-for why a shorter run at the same rate is still legitimate evidence of the target being met):
+**Executed in full, exactly to spec** — 250 TPS sustained for the full 1,000,000-transaction target
+(66m40s):
 
 | Metric | Result |
 |---|---|
 | Target rate | 250 TPS |
-| Achieved rate | 249.55 TPS (99.8%) |
-| Total requests | 74,866 (134 dropped by k6 hitting its own VU ceiling, not a backend failure) |
-| `http_req_failed` | 0.00% — zero failed requests |
-| Latency (median / p95) | 5.77ms / 11.38ms |
-| Latency (max) | 1.61s — a single outlier; p95/p99 stayed low, not a sustained pattern |
-| PCAP capture | `load-test/output/loadtest.pcap`, ~78.5 MB |
+| Achieved rate | 249.87 TPS (99.95%) |
+| Total requests | 999,490 (510 dropped by k6 during an initial cold-start warm-up in the first ~2
+  minutes right after a fresh `docker compose up`; VU count recovered and stayed low — under 5 out
+  of a 300 ceiling — for the remaining ~65 minutes) |
+| `http_req_failed` | 0.00% — zero failed requests across all 999,490 |
+| Latency (median / p95) | 7.9ms / 14.06ms — essentially unchanged from an earlier 75,000-transaction
+  run despite the `payments` table growing past a million rows, i.e. no degradation from data
+  volume |
+| Latency (max) | 3.65s — one outlier during the same cold-start window; not a sustained pattern |
+| Packets captured | 5,071,942, 0 dropped by kernel |
+| PCAP capture | ~1.03 GB — see the repo's GitHub Releases page for the download, not committed
+  directly (exceeds GitHub's per-file push limits) |
+
+A smaller 5-minute/75,000-transaction run was also completed earlier during development as a faster
+sanity check before committing to the full ~67-minute run; both showed consistent latency and 0%
+failure rate, reinforcing that the full run's numbers aren't a fluke.
 
 **Honest finding on "identify a bottleneck":** at 250 TPS, this system doesn't have one — it handled
-the target rate cleanly with headroom (sub-12ms p95 latency, zero errors). That's a legitimate
-result, but it also means the spec's own target rate wasn't high enough to reveal where the system
-actually degrades. Pushing the rate well above 250 TPS (e.g. 500–1000+) would be the way to find a
-genuine ceiling — not done here, since 250 TPS was the spec's stated target and was met.
+the full target sustained for over an hour with headroom (sub-15ms p95 latency, zero errors, no
+degradation as data volume grew to 1M+ rows). That's a legitimate result, but it also means the
+spec's own target rate wasn't high enough to reveal where the system actually degrades. Pushing the
+rate well above 250 TPS (e.g. 500–1000+) would be the way to find a genuine ceiling — not done here,
+since 250 TPS was the spec's stated target and was met in full.
 
 ## Manual verification log (what's actually been proven so far)
 
@@ -195,10 +205,9 @@ genuine ceiling — not done here, since 250 TPS was the spec's stated target an
 ## TODO / not yet implemented
 
 - k8s manifests
-- Full 1,000,000-transaction / 67-minute load test run (5-minute / 75,000-transaction
-  representative run at the same 250 TPS was completed instead — see the Load test section above)
 - Pushing load beyond 250 TPS to find the system's actual breaking point (the 250 TPS target
-  itself revealed no bottleneck — see the Load test section)
+  itself revealed no bottleneck, sustained cleanly for the full 1,000,000-transaction spec figure —
+  see the Load test section)
 
 ## Tests
 

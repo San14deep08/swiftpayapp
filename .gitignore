@@ -13,8 +13,6 @@ target/
 .env
 *.log
 
-# Load-test PCAP captures — large binary files, regenerated per run.
-# The one currently in git history (load-test/output/loadtest.pcap) is
-# kept as submission evidence for the 250 TPS run; don't commit new ones.
-load-test/output/.DS_Store
+load-test/output/
+
 .DS_Store
