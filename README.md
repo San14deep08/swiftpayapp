@@ -161,8 +161,8 @@ unreliable).
   volume |
 | Latency (max) | 3.65s — one outlier during the same cold-start window; not a sustained pattern |
 | Packets captured | 5,071,942, 0 dropped by kernel |
-| PCAP capture | ~1.03 GB — see the repo's GitHub Releases page for the download, not committed
-  directly (exceeds GitHub's per-file push limits) |
+| PCAP capture | ~1.03 GB — [download from GitHub Releases](https://github.com/San14deep08/swiftpayapp/releases/tag/v1.0-loadtest-1m)
+  (not committed directly to the repo — exceeds GitHub's 100MB per-file push limit) |
 
 A smaller 5-minute/75,000-transaction run was also completed earlier during development as a faster
 sanity check before committing to the full ~67-minute run; both showed consistent latency and 0%
