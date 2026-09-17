@@ -1,0 +1,68 @@
+# Generated from db/init.sql so both stay in sync — if you edit the
+# schema, edit db/init.sql and regenerate this file, not the other way
+# around.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: swiftpay
+data:
+  init.sql: |
+    -- SwiftPay schema. Mounted into the Postgres container's
+    -- /docker-entrypoint-initdb.d/ so it runs once on first container startup
+    -- against a fresh volume. Both gateway-service and ledger-service run with
+    -- spring.jpa.hibernate.ddl-auto=validate — Hibernate never auto-generates
+    -- schema; this file is the single source of truth for table shape.
+
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    CREATE TABLE accounts (
+        user_id     VARCHAR(64) PRIMARY KEY,
+        balance     NUMERIC(19,4) NOT NULL DEFAULT 0 CHECK (balance >= 0),
+        currency    VARCHAR(3) NOT NULL DEFAULT 'USD',
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE payments (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        transaction_id  VARCHAR(64) NOT NULL UNIQUE,
+        sender_id       VARCHAR(64) NOT NULL REFERENCES accounts(user_id),
+        receiver_id     VARCHAR(64) NOT NULL REFERENCES accounts(user_id),
+        amount          NUMERIC(19,4) NOT NULL CHECK (amount > 0),
+        currency        VARCHAR(3) NOT NULL,
+        status          VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+                            CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED')),
+        failure_reason  VARCHAR(255),
+        correlation_id  VARCHAR(64) NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX idx_payments_sender ON payments(sender_id);
+    CREATE INDEX idx_payments_receiver ON payments(receiver_id);
+    CREATE INDEX idx_payments_status ON payments(status);
+
+    -- Mock OLAP sink for the Analytics Worker (Service C, bonus). Append-only
+    -- fact table in its own schema rather than a real ClickHouse instance —
+    -- see README for the tradeoff.
+    CREATE SCHEMA IF NOT EXISTS analytics;
+
+    CREATE TABLE analytics.payment_events (
+        id              BIGSERIAL PRIMARY KEY,
+        transaction_id  VARCHAR(64) NOT NULL UNIQUE,
+        sender_id       VARCHAR(64) NOT NULL,
+        receiver_id     VARCHAR(64) NOT NULL,
+        amount          NUMERIC(19,4) NOT NULL,
+        currency        VARCHAR(3) NOT NULL,
+        completed_at    TIMESTAMPTZ NOT NULL,
+        ingested_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    -- Seed accounts so the happy path and insufficient-funds path are both
+    -- exercisable immediately after `docker compose up`.
+    INSERT INTO accounts (user_id, balance, currency) VALUES
+        ('user-1', 1000.0000, 'USD'),
+        ('user-2', 500.0000, 'USD'),
+        ('user-3', 0.0000, 'USD');
+

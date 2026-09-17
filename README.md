@@ -100,6 +100,12 @@ curl -X POST http://localhost:8081/v1/payments \
 Swagger UI: `http://localhost:8081/swagger-ui.html` (gateway), `:8082/swagger-ui.html` (ledger,
 once implemented). Health: `/actuator/health` on each service.
 
+### Alternative: Kubernetes / Minikube
+
+The spec allows either `docker-compose.yml` (above) or K8s manifests — both are provided.
+See `k8s/README.md` for the full Minikube setup, build workflow, and apply order. **Written but not
+run against a real cluster** — same honest-verification pattern as everything else in this repo.
+
 ## Verification status — read before trusting anything above
 
 This codebase was written in a sandboxed environment with **no access to Maven Central**, so
@@ -204,7 +210,6 @@ since 250 TPS was the spec's stated target and was met in full.
 
 ## TODO / not yet implemented
 
-- k8s manifests
 - Pushing load beyond 250 TPS to find the system's actual breaking point (the 250 TPS target
   itself revealed no bottleneck, sustained cleanly for the full 1,000,000-transaction spec figure —
   see the Load test section)
