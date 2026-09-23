@@ -5,6 +5,31 @@ Hackathon submission. Three Spring Boot services communicating over Kafka.
 **Status:** All three services implemented, with passing automated tests across the board,
 verified locally.
 
+## AI-assisted development
+
+This project was built with AI assistance, as explicitly permitted by the assessment. Three
+documents in `docs/` cover it, in the order a reviewer would want to read them:
+
+1. **[`ai-prompt-operating-instructions.md`](docs/ai-prompt-operating-instructions.md)** — the
+   actual, verbatim system prompt that governed the build: the mandatory stack, the five
+   non-negotiable correctness rules, and the working discipline (verify before claiming, compile
+   before integrating). Two dated addenda were added after the audit below and are labeled as such
+   — they did not govern the original build.
+2. **[`ai-engineering-playbook.md`](docs/ai-engineering-playbook.md)** — the full SDLC workflow,
+   prompt-by-category playbook, human/AI responsibility matrix, and — the part worth reading
+   first — **five real failure cases** from this actual build (Section 8), including a subtle
+   Spring `@Transactional` self-invocation bug caught by code reading before it ever ran, and a
+   test suite that compiled cleanly but silently never executed due to a Maven naming mismatch.
+   Section 13 is a completed verification checklist against real evidence, including gaps
+   disclosed rather than hidden (a Personal Access Token briefly exposed during development;
+   idempotency verified only under mocked, not live, concurrency).
+3. **[`swiftpay-enterprise-readiness-audit.md`](docs/swiftpay-enterprise-readiness-audit.md)** —
+   an independent, deliberately skeptical audit of the two documents above, cross-checking their
+   claims against each other and against the real build evidence. It found and the other two
+   documents now reflect a fix for: an internal contradiction between two sections on idempotency
+   verification, an unverified correctness rule that had been marked non-negotiable without a
+   visible status flag, and a missing requirement-traceability matrix (now included).
+
 ## Architecture
 
 ```
