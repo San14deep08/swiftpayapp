@@ -9,6 +9,14 @@ This is the companion document to `ai-engineering-playbook.md`, which documents 
 verification protocol, and real evidence (including failure cases) produced while this prompt was
 in effect.
 
+**Sections 1–7 below are that verbatim prompt, unedited.** Sections 8 and 9 are dated addenda,
+added after an enterprise-readiness audit. Section 8 addresses a gap the original prompt had no
+clause for — secrets and sensitive data — which was not theoretical: a Personal Access Token was
+pasted into the actual build session in plaintext, caught, and remediated. Section 9 records that
+rule #4 in Section 3, though correctly called non-negotiable in importance, was never fully
+verified in execution. Neither addendum governed the original build; both are added here as the
+corrected standard for any project that reuses this prompt going forward.
+
 ---
 
 # SwiftPay — Assistant Operating Instructions
@@ -92,3 +100,15 @@ Anything below the line you are currently on can wait. Do not start item 9 while
 ## 7. Definition of done
 
 A change is done when: it compiles, its test passes, the service still starts under compose, and the behaviour has been observed — not assumed.
+
+## 8. Security and sensitive data — *addendum, added post-audit; did not govern the original build*
+
+Never paste credentials, API tokens, connection strings with embedded passwords, or any production data into a prompt or into a generated file. If a command's output might contain one — for example a git remote URL used for authentication — redact it before it enters the conversation, and say so.
+
+If a secret is pasted anyway, stop and flag it immediately, before proceeding with the surrounding task. Do not mention it only as an aside afterward.
+
+## 9. Verification status note — *addendum, added post-audit*
+
+Section 3, rule #4 states that Kafka consumer resilience under a database outage is non-negotiable. As originally written, that word describes the requirement's importance, not a claim that it was verified. It was not: two live attempts to simulate a database outage against the running system failed on tooling before any actual outage behaviour was observed, and only the retry-versus-DLQ *classification logic* was unit-tested in isolation from a real broker (see `ai-engineering-playbook.md`, Section 13).
+
+This is recorded here, next to the rule it qualifies, rather than left implicit in a separate document. Any project reusing this prompt should treat a "non-negotiable" correctness rule as requiring an explicit verification status check before submission — a rule can be genuinely important and still not yet be proven, and the two should never be conflated in how a result gets reported.

@@ -438,6 +438,8 @@ The controlling test: **clone fresh, follow the document exactly, and see whethe
 
 Five phases, each with defined AI activity, developer responsibility, and an exit gate. Work did not proceed past a gate without explicit developer approval.
 
+> **Note on how these gates actually ran.** The compile → run → test → correct loop described in each phase below is directly evidenced throughout the build. The five gates are not five sequential, separately-committed approvals — the initial commit to the repository contains the full three-service scaffold, with the loop then applied per-service and per-defect from that point onward. Read the phase table as the discipline that governed the whole build, not as a literal one-gate-per-commit sequence. (See Section 11's note on commit history for the supporting detail.)
+
 ---
 
 ### Phase 1 — Understand
@@ -764,15 +766,17 @@ The difference is not length. It is that the second prompt removes every decisio
 | 11 | Validate error handling paths | Swallowed exceptions convert failures into silent data corruption |
 | 12 | Maintain human approval gates | Removing the gate removes the control |
 
+**Guardrail #2 in practice.** This guardrail is written as preventative; the evidence for it is corrective. A Personal Access Token was pasted into a real session once during this project — the guardrail did not stop that, it ensured the incident was caught immediately and remediated (the token was flagged, the developer instructed to revoke it, and the local git configuration stripped of it — see Section 13). Stated plainly rather than implied: this guardrail functioned as a detection-and-response control, not a prevention control, on its one real test.
+
 ### Practices specific to financial systems
 
-| Practice | Why it matters here |
-|---|---|
-| Exact numeric types for all monetary values | Floating-point money is a defect class that testing rarely catches |
-| Every balance mutation inside an explicit transaction boundary | Partial movement corrupts the ledger permanently |
-| Idempotency verified under genuine concurrency | Sequential testing cannot detect the race it must prevent |
-| Every failure path produces an observable outcome | A silently dropped payment is worse than a rejected one |
-| Constraints enforced by the database, not application code | Application-layer invariants fail under concurrent access |
+| Practice | Why it matters here | Status in this project |
+|---|---|---|
+| Exact numeric types for all monetary values | Floating-point money is a defect class that testing rarely catches | Applied — `NUMERIC(19,4)` throughout |
+| Every balance mutation inside an explicit transaction boundary | Partial movement corrupts the ledger permanently | Applied and verified — see Section 8, Case 4 |
+| Idempotency logic tested against concurrency branches | Sequential testing cannot detect the race it must prevent | **Partial** — unit-tested against a mocked Redis (`IdempotencyServiceTest`); a live concurrent-duplicate submission against a real Redis instance was not performed. See Section 13. |
+| Every failure path produces an observable outcome | A silently dropped payment is worse than a rejected one | Applied for the paths exercised (insufficient funds, validation); the database-outage retry path was not exercised end to end — see Section 13 |
+| Balance sufficiency enforced under a database-issued row lock, invoked from application code | Application-layer invariants checked without a lock fail under concurrent access | Applied and verified — `SELECT ... FOR UPDATE` acquired via `LedgerTransactionService`, proven under genuine concurrent execution (Section 8) |
 
 ---
 
@@ -791,8 +795,20 @@ The difference is not length. It is that the second prompt removes every decisio
 | Debugging conversation transcripts | Yes | Session transcript |
 | Before/after correction examples | Yes | Session transcript; also visible as in-code comments left in place at the correction site (e.g. `k8s/12-kafka.yaml`, `PaymentPersistenceService.java`) |
 | Load test results and packet capture | Yes | `github.com/San14deep08/swiftpayapp/releases/tag/v1.0-loadtest-1m`; results table in `README.md` |
-| Requirement traceability matrix | No | Not produced as a discrete artifact — requirement coverage is described in prose in `README.md`, not tabulated against requirement IDs. Can be produced from the same session if the review requires it. |
-| Validation checklist, completed | Not yet — can be completed now | Section 13 of this document; every line item can be marked from the real transcript rather than left as an unchecked template |
+| Requirement traceability matrix | Yes | See table below — added post-audit |
+| Validation checklist, completed | Yes | Section 13 of this document |
+
+### Requirement traceability matrix
+
+Deliberately lightweight — five correctness rules, not an enterprise-scale requirement register, because that is the actual size of the non-negotiable set defined in the System Prompt.
+
+| Req ID | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| COR-1 | Idempotency — a duplicate submission produces exactly one ledger movement | `IdempotencyService` (gateway-service) | `IdempotencyServiceTest` | Partial — verified against mocked Redis concurrency branches; live concurrent-duplicate submission against a real Redis instance not performed |
+| COR-2 | Debit and credit are atomic; no partial movement survives a failure | `LedgerTransactionService` (ledger-service) | `LedgerTransactionServiceTest` | Verified — insufficient-funds path proven to leave both balances untouched |
+| COR-3 | Insufficient funds fails cleanly, no write, no silent drop | `PaymentPersistenceService`, `LedgerTransactionService` | `LedgerTransactionServiceTest` | Verified — live call against a zero-balance account and automated test both confirm |
+| COR-4 | Kafka consumer survives a database outage without message loss | `KafkaConsumerConfig`, `NonRetryableExceptions` | `NonRetryableExceptionsTest` | Partial — retry-vs-DLQ exception classification is unit-tested in isolation; end-to-end behaviour under a real outage was not verified (two live attempts failed on tooling, not on the code — see Section 13) |
+| COR-5 | Two concurrent transfers from one account cannot both succeed against the same balance | `LedgerTransactionService` (row locking) | `LedgerTransactionServiceTest` (concurrent test) | Verified — proven under genuine concurrent execution, race resolved a different way on two separate runs, invariant held both times. Strongest evidence in the project. |
 
 ### Note on commit history
 
@@ -933,10 +949,11 @@ The result is a development approach that is materially faster than unaided work
 
 | Section | Status |
 |---|---|
-| 1–10, 12 | Complete |
-| 8 — Failure cases | Complete — 5 cases, all real, cases 4–5 drawn from implementation and validation |
-| 11 — Evidence | Complete — marked honestly; two items (`traceability matrix`, `validation checklist`) noted as not yet produced rather than falsely confirmed |
-| 13 — Final Review Checklist | **Not yet completed against real evidence — see note below** |
+| 1–9, 12 | Complete |
+| 8 — Failure cases | Complete — 5 real cases; cases 4–5 drawn from implementation and validation |
+| 10 — Guardrails | Complete — corrected post-audit: guardrail #2 reframed as a detection-and-response control rather than a preventative one, based on its one real test; financial-practices table corrected to match Section 13's verification status exactly |
+| 11 — Evidence | Complete — including a requirement traceability matrix, added post-audit |
+| 13 — Final Review Checklist | Complete against real evidence |
 | Executive summary velocity claims | Left qualitative, as instructed — no measured percentage exists to report |
 
-**Remaining before submission:** Section 13's checklist is still the template's unchecked boxes. It can be completed now, from the same transcript cases 4–5 were drawn from, rather than left as a form. Ask for it to be filled in and it will be, line by line, with a note wherever the transcript doesn't support a checked box.
+**Post-audit remediation applied:** this document underwent an independent enterprise-readiness audit (`swiftpay-enterprise-readiness-audit.md`). The audit's six priority findings — an idempotency claim in Section 10 that contradicted Section 13, an unverified non-negotiable correctness rule stated without a visible status flag, a missing requirement traceability matrix, a phase-gate narrative not matched by commit history, a missing security clause in the companion System Prompt, and an imprecise database-constraint claim — have all been applied. The System Prompt's corresponding fix is recorded there as two labeled addenda (Sections 8–9) rather than a silent edit to its verbatim historical text.
